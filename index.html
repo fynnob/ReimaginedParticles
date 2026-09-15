@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reimagined Particles - Cube Generator</title>
+  <style>
+    body { font-family: sans-serif; max-width: 500px; margin: 40px auto; padding: 0 16px; }
+    label { display: block; margin-top: 12px; }
+    input, select { width: 100%; padding: 6px; box-sizing: border-box; }
+    button { margin-top: 16px; padding: 10px 20px; cursor: pointer; margin-right: 8px; }
+    #result { margin-top: 20px; padding: 12px; background: #f0f0f0; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+    #code { font-size: 1.5em; font-weight: bold; color: #2b6cb0; }
+  </style>
+</head>
+<body>
+  <h1>Cube → Particles</h1>
+
+  <label>Name
+    <input id="name" value="My Cube">
+  </label>
+  <label>Size
+    <input id="size" type="number" step="0.1" value="1">
+  </label>
+  <label>Point spacing (density)
+    <input id="density" type="number" step="0.05" value="0.2">
+  </label>
+  <label>Mode
+    <select id="mode">
+      <option value="surface">Surface (faces)</option>
+      <option value="edges">Edges only</option>
+    </select>
+  </label>
+  <label>Color
+    <input id="color" type="color" value="#ffffff">
+  </label>
+
+  <button onclick="preview()">Preview</button>
+  <button onclick="save()">Save & Get Import Code</button>
+
+  <div id="result"></div>
+
+  <script>
+    // ---- kvdb.io config ----
+    const KVDB_BUCKET = '8NBTF4xRSsqU2ZYpCDaHpY';
+    const KVDB_BASE = `https://kvdb.io/${KVDB_BUCKET}`;
+
+    // ---- Cube point generator (runs entirely client-side) ----
+    function generateCube({ size = 1, density = 0.2, mode = 'surface', color = '#FFFFFF' }) {
+      const points = [];
+      const half = size / 2;
+      const steps = Math.max(2, Math.round(size / density));
+      const range = [];
+      for (let i = 0; i <= steps; i++) range.push(-half + (i / steps) * size);
+
+      if (mode === 'edges') {
+        const corners = [-half, half];
+        for (const x of corners) for (const y of corners) for (const t of range) points.push([x, y, t]);
+        for (const x of corners) for (const z of corners) for (const t of range) points.push([x, t, z]);
+        for (const y of corners) for (const z of corners) for (const t of range) points.push([t, y, z]);
+      } else {
+        for (const x of range) for (const y of range) for (const z of range) {
+          const onFace =
+            Math.abs(x - half) < 1e-6 || Math.abs(x + half) < 1e-6 ||
+            Math.abs(y - half) < 1e-6 || Math.abs(y + half) < 1e-6 ||
+            Math.abs(z - half) < 1e-6 || Math.abs(z + half) < 1e-6;
+          if (onFace) points.push([x, y, z]);
+        }
+      }
+
+      return {
+        type: 'cube',
+        color,
+        points: points.map(([x, y, z]) => ({
+          x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3)
+        }))
+      };
+    }
+
+    // ---- 8-char code generator (no ambiguous chars: no O/0, I/1) ----
+    function generateCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      return code;
+    }
+
+    function getParams() {
+      return {
+        size: parseFloat(document.getElementById('size').value),
+        density: parseFloat(document.getElementById('density').value),
+        mode: document.getElementById('mode').value,
+        color: document.getElementById('color').value
+      };
+    }
+
+    let lastShape = null;
+
+    function preview() {
+      lastShape = generateCube(getParams());
+      document.getElementById('result').textContent =
+        `Generated ${lastShape.points.length} points.\n\n` +
+        JSON.stringify(lastShape.points.slice(0, 5), null, 2) + '\n...';
+    }
+
+    async function save() {
+      if (!lastShape) preview();
+
+      const record = {
+        name: document.getElementById('name').value || 'Unnamed',
+        shape: lastShape,
+        createdAt: Date.now()
+      };
+
+      // Pick a code, check it's free (kvdb returns 404 if key doesn't exist)
+      let code;
+      let attempts = 0;
+      while (attempts < 5) {
+        code = generateCode();
+        const check = await fetch(`${KVDB_BASE}/${code}`);
+        if (check.status === 404) break;
+        attempts++;
+      }
+
+      const putRes = await fetch(`${KVDB_BASE}/${code}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record)
+      });
+
+      if (!putRes.ok) {
+        document.getElementById('result').textContent = 'Save failed: ' + putRes.status;
+        return;
+      }
+
+      document.getElementById('result').innerHTML =
+        `Saved! Import in-game with:\n<div id="code">/rp import ${code}</div>`;
+    }
+  </script>
+</body>
+</html>
