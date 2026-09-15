@@ -41,9 +41,9 @@
 
   <script>
     // ---- Codehooks config ----
-    const CH_BASE = 'https://quirky-nook-80b9.codehooks.io/dev'; // project + space
+    const CH_BASE = 'https://YOUR_APP.codehooks.io/dev'; // Replace with your base URL
     const CH_COLLECTION = 'shapes';
-    const CH_APIKEY = '72c95eb4-d7a6-49f3-a346-6e822f5c415b';
+    const CH_APIKEY = 'YOUR_API_KEY';                    // Replace with your API key
 
     // ---- Cube point generator (runs entirely client-side) ----
     function generateCube({ size = 1, density = 0.2, mode = 'surface', color = '#FFFFFF' }) {
@@ -77,8 +77,9 @@
       };
     }
 
+    // ---- 8-char code generator (no ambiguous chars: no O/0, I/1) ----
     function generateCode() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code = '';
       for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
       return code;
@@ -102,13 +103,23 @@
         JSON.stringify(lastShape.points.slice(0, 5), null, 2) + '\n...';
     }
 
+    // Defensive check to handle empty body responses from Codehooks
     async function codeExists(code) {
-      const res = await fetch(`${CH_BASE}/${CH_COLLECTION}?code=${code}`, {
-        headers: { 'x-apikey': CH_APIKEY }
-      });
-      if (!res.ok) return false; // treat errors as "doesn't exist", worst case rare collision
-      const data = await res.json();
-      return Array.isArray(data) && data.length > 0;
+      try {
+        const res = await fetch(`${CH_BASE}/${CH_COLLECTION}?code=${code}`, {
+          headers: { 'x-apikey': CH_APIKEY }
+        });
+        if (!res.ok) return false;
+
+        const text = await res.text();
+        if (!text) return false; // empty body = no matches / collection not created yet
+
+        const data = JSON.parse(text);
+        return Array.isArray(data) && data.length > 0;
+      } catch (err) {
+        console.warn('codeExists check failed, assuming free:', err);
+        return false;
+      }
     }
 
     async function save() {
@@ -128,24 +139,28 @@
         createdAt: Date.now()
       };
 
-      const res = await fetch(`${CH_BASE}/${CH_COLLECTION}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-apikey': CH_APIKEY
-        },
-        body: JSON.stringify(record)
-      });
+      try {
+        const res = await fetch(`${CH_BASE}/${CH_COLLECTION}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-apikey': CH_APIKEY
+          },
+          body: JSON.stringify(record)
+        });
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        document.getElementById('result').textContent =
-          `Save failed: ${res.status}\n${errText}`;
-        return;
+        const text = await res.text();
+
+        if (!res.ok) {
+          document.getElementById('result').textContent = `Save failed: ${res.status}\n${text}`;
+          return;
+        }
+
+        document.getElementById('result').innerHTML =
+          `Saved! Import in-game with:\n<div id="code">/rp import ${code}</div>`;
+      } catch (err) {
+        document.getElementById('result').textContent = `Save error: ${err.message}`;
       }
-
-      document.getElementById('result').innerHTML =
-        `Saved! Import in-game with:\n<div id="code">/rp import ${code}</div>`;
     }
   </script>
 </body>
