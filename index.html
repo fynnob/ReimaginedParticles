@@ -46,6 +46,9 @@
     const CH_APIKEY = '72c95eb4-d7a6-49f3-a346-6e822f5c415b';
 
     // ---- Cube point generator (runs entirely client-side) ----
+    // Each point now carries its OWN color, not just the shape as a whole.
+    // Right now every point gets the same color from the picker, but this
+    // structure is what lets image imports / multi-color shapes work later.
     function generateCube({ size = 1, density = 0.2, mode = 'surface', color = '#FFFFFF' }) {
       const points = [];
       const half = size / 2;
@@ -70,9 +73,9 @@
 
       return {
         type: 'cube',
-        color: color,
         points: points.map(([x, y, z]) => ({
-          x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3)
+          x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3),
+          color: color
         }))
       };
     }
@@ -99,7 +102,7 @@
     function preview() {
       lastShape = generateCube(getParams());
       document.getElementById('result').textContent =
-        `Generated ${lastShape.points.length} points (Color: ${lastShape.color}).\n\n` +
+        `Generated ${lastShape.points.length} points.\n\n` +
         JSON.stringify(lastShape.points.slice(0, 5), null, 2) + '\n...';
     }
 
@@ -135,7 +138,6 @@
       const record = {
         code,
         name: document.getElementById('name').value || 'Unnamed',
-        color: lastShape.color,
         shape: lastShape,
         createdAt: Date.now()
       };
